@@ -1,0 +1,4 @@
+classes=5
+train: ./train/
+val: ./valid/
+test: ./test/

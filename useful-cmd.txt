@@ -1,0 +1,2 @@
+pip3 install -r ./requirements.txt
+python3 ./train.py --device 0 --batch-size 2 --img 512 512 --data ./_vex.yaml --cfg ./cfg/yolov4-tiny.cfg --name yolov4-vex-detect --epochs 300 --weights ./yolov4.conv.137 --workers 2 --hyp ./data/hyp.scratch.s.yaml

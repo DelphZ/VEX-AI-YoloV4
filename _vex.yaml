@@ -1,0 +1,10 @@
+# train and val datasets (image directory or *.txt file with image paths)
+train: ./train/
+val: ./valid/
+test: ./test/
+
+# number of classes
+nc: 5
+
+# class names
+names: ['Blue-Ring','Mobile-Goal','Red-Ring','Yellow-Stake-Head','Blue-Stake-Head']

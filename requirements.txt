@@ -1,0 +1,11 @@
+numpy >= 1.17
+opencv-python >= 4.1
+setuptools>=59.5.0
+pyyaml
+torch >= 1.6
+torchvision
+matplotlib
+pycocotools
+tqdm
+pillow
+tensorboard >= 1.14
