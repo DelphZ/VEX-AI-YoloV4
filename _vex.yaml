@@ -4,7 +4,7 @@ val: ./valid/
 test: ./test/
 
 # number of classes
-nc: 5
+nc: 6
 
 # class names
-names: ['Blue-Ring','Mobile-Goal','Red-Ring','Yellow-Stake-Head','Blue-Stake-Head']
+names: ['Blue-Ring','Mobile-Goal','Red-Ring','Yellow-Stake-Head','Blue-Stake-Head','Red-Stake-Head']

@@ -101,9 +101,9 @@ class VexCommunicator:
                         category_str, confidence_str = line.split(',')
                         category = int(category_str)
                         confidence = float(confidence_str)
-                        if 0 <= category <= 4:
+                        if 0 <= category <= 5:
                             results = self.process_request(category, confidence)
-                            if results is not None:
+                            if results is not None and len(results) > 0:
                                 self.ser.write(json.dumps(results).encode() + b'\n')
                                 print("send the detected obj")
                             else:

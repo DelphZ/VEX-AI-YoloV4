@@ -1,4 +1,5 @@
 # General utils
+
 import glob
 import logging
 import math
@@ -20,11 +21,6 @@ from utils.google_utils import gsutil_getsize
 from utils.metrics import fitness, fitness_p, fitness_r, fitness_ap50, fitness_ap, fitness_f   
 from utils.torch_utils import init_torch_seeds
 
-from utils.compat_type import np_int
-
-import warnings
-from packaging import version
-
 # Set printoptions
 torch.set_printoptions(linewidth=320, precision=5, profile='long')
 np.set_printoptions(linewidth=320, formatter={'float_kind': '{:11.5g}'.format})  # format short g, %precision=5
@@ -32,45 +28,6 @@ matplotlib.rc('font', **{'size': 11})
 
 # Prevent OpenCV from multithreading (to use PyTorch DataLoader)
 cv2.setNumThreads(0)
-
-def safe_torch_load(f, map_location=None):
-    """
-    Load a torch checkpoint in a way compatible with both old and new PyTorch:
-      - Try weights_only=True (safe) on torch >= 2.6
-      - If that fails due to missing safe globals, try to add numpy._core.multiarray._reconstruct
-      - If allowlist not available or still fails, fall back to weights_only=False with a warning.
-
-    Use only on checkpoints you trust when falling back to weights_only=False.
-    """
-    tv = version.parse(torch.__version__)
-    # older PyTorch: simple load
-    if tv < version.parse("2.6"):
-        return torch.load(f, map_location=map_location)
-
-    # PyTorch >= 2.6: try safe load first
-    try:
-        return torch.load(f, map_location=map_location, weights_only=True)
-    except Exception as e_safe:
-        warnings.warn(f"safe_torch_load: safe weights_only load failed ({e_safe}). "
-                      "Attempting to allowlist numpy reconstruct or fall back to legacy load. "
-                      "Falling back to legacy load may execute arbitrary code — only do this for trusted files.")
-        # Try to add numpy reconstruct to safe globals (fixes many numpy-created pickles)
-        try:
-            # prefer the modern API if available
-            try:
-                torch.serialization.add_safe_globals([np.core.multiarray._reconstruct])
-                return torch.load(f, map_location=map_location, weights_only=True)
-            except Exception:
-                # some builds may provide safe_globals context manager instead
-                try:
-                    with torch.serialization.safe_globals([np.core.multiarray._reconstruct]):
-                        return torch.load(f, map_location=map_location, weights_only=True)
-                except Exception:
-                    # give up on allowlist and fall back to legacy load
-                    return torch.load(f, map_location=map_location, weights_only=False)
-        except Exception:
-            # final fallback: legacy load (unsafe)
-            return torch.load(f, map_location=map_location, weights_only=False)
 
 
 def set_logging(rank=-1):
@@ -149,7 +106,7 @@ def labels_to_class_weights(labels, nc=80):
         return torch.Tensor()
 
     labels = np.concatenate(labels, 0)  # labels.shape = (866643, 5) for COCO
-    classes = labels[:, 0].astype(np_int)  # labels = [class xywh]
+    classes = labels[:, 0].astype(np.int)  # labels = [class xywh]
     weights = np.bincount(classes, minlength=nc)  # occurrences per class
 
     # Prepend gridpoint count (for uCE training)
@@ -165,7 +122,7 @@ def labels_to_class_weights(labels, nc=80):
 def labels_to_image_weights(labels, nc=80, class_weights=np.ones(80)):
     # Produces image weights based on class mAPs
     n = len(labels)
-    class_counts = np.array([np.bincount(labels[i][:, 0].astype(np_int), minlength=nc) for i in range(n)])
+    class_counts = np.array([np.bincount(labels[i][:, 0].astype(np.int), minlength=nc) for i in range(n)])
     image_weights = (class_weights.reshape(1, nc) * class_counts).sum(1)
     # index = random.choices(range(n), weights=image_weights, k=1)  # weight image sample
     return image_weights
@@ -400,8 +357,7 @@ def non_max_suppression(prediction, conf_thres=0.1, iou_thres=0.6, merge=False, 
 
 def strip_optimizer(f='weights/best.pt', s=''):  # from utils.general import *; strip_optimizer()
     # Strip optimizer from 'f' to finalize training, optionally save as 's'
-    # x = torch.load(f, map_location=torch.device('cpu'))
-    x = safe_torch_load(f, map_location=torch.device('cpu'))
+    x = torch.load(f, map_location=torch.device('cpu'))
     x['optimizer'] = None
     x['training_results'] = None
     x['epoch'] = -1

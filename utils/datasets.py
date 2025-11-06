@@ -31,33 +31,6 @@ help_url = 'https://github.com/ultralytics/yolov5/wiki/Train-Custom-Data'
 img_formats = ['bmp', 'jpg', 'jpeg', 'png', 'tif', 'tiff', 'dng']  # acceptable image suffixes
 vid_formats = ['mov', 'avi', 'mp4', 'mpg', 'mpeg', 'm4v', 'wmv', 'mkv']  # acceptable video suffixes
 
-from packaging import version
-import warnings
-
-from utils.compat_type import np_int
-
-# Helper: safe torch.load that works across PyTorch versions (weights_only handling)
-def safe_torch_load(path):
-    """
-    Load a torch-saved file in a way compatible with both older PyTorch (no weights_only)
-    and newer PyTorch (>=2.6) that defaults to weights_only=True.
-
-    - On torch >= 2.6: try weights_only=True (safe). If it fails, warn and retry with weights_only=False.
-    - On older torch: use plain torch.load(path).
-    """
-    torch_ver = version.parse(torch.__version__)
-    if torch_ver >= version.parse("2.6"):
-        try:
-            return torch.load(path, weights_only=True)
-        except Exception as e:
-            warnings.warn(
-                f"safe_torch_load: weights-only load failed for {path} ({e}), retrying legacy load. "
-                "This will unpickle arbitrary objects; do this only if you trust the file."
-            )
-            return torch.load(path, weights_only=False)
-    else:
-        return torch.load(path)
-
 # Get orientation exif tag
 for orientation in ExifTags.TAGS.keys():
     if ExifTags.TAGS[orientation] == 'Orientation':
@@ -418,8 +391,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         self.label_files = img2label_paths(self.img_files)  # labels
         cache_path = str(Path(self.label_files[0]).parent) + '.cache3'  # cached labels
         if os.path.isfile(cache_path):
-            # cache = torch.load(cache_path)  # Old torch load
-            cache = safe_torch_load(cache_path)  # safe torch load for compacting Jetson Nano torch and New PyTorch
+            cache = torch.load(cache_path)  # load
             if cache['hash'] != get_hash(self.label_files + self.img_files):  # dataset changed
                 cache = self.cache_labels(cache_path)  # re-cache
         else:
@@ -434,7 +406,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         self.label_files = img2label_paths(cache.keys())  # update
 
         n = len(shapes)  # number of images
-        bi = np.floor(np.arange(n) / batch_size).astype(np_int)  # batch index
+        bi = np.floor(np.arange(n) / batch_size).astype(np.int)  # batch index
         nb = bi[-1] + 1  # number of batches
         self.batch = bi  # batch index of image
         self.n = n
@@ -461,7 +433,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                 elif mini > 1:
                     shapes[i] = [1, 1 / mini]
 
-            self.batch_shapes = np.ceil(np.array(shapes) * img_size / stride + pad).astype(np_int) * stride
+            self.batch_shapes = np.ceil(np.array(shapes) * img_size / stride + pad).astype(np.int) * stride
 
         # Check labels
         create_datasubset, extract_bounding_boxes, labels_loaded = False, False, False
@@ -507,7 +479,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                         b = x[1:] * [w, h, w, h]  # box
                         b[2:] = b[2:].max()  # rectangle to square
                         b[2:] = b[2:] * 1.3 + 30  # pad
-                        b = xywh2xyxy(b.reshape(-1, 4)).ravel().astype(np_int)
+                        b = xywh2xyxy(b.reshape(-1, 4)).ravel().astype(np.int)
 
                         b[[0, 2]] = np.clip(b[[0, 2]], 0, w)  # clip boxes outside of image
                         b[[1, 3]] = np.clip(b[[1, 3]], 0, h)
@@ -703,8 +675,7 @@ class LoadImagesAndLabels9(Dataset):  # for training/testing
         self.label_files = img2label_paths(self.img_files)  # labels
         cache_path = str(Path(self.label_files[0]).parent) + '.cache3'  # cached labels
         if os.path.isfile(cache_path):
-            # cache = torch.load(cache_path)  # load
-            cache = safe_torch_load(cache_path)  # safe torch load for compacting Jetson Nano torch and New PyTorch
+            cache = torch.load(cache_path)  # load
             if cache['hash'] != get_hash(self.label_files + self.img_files):  # dataset changed
                 cache = self.cache_labels(cache_path)  # re-cache
         else:
@@ -719,7 +690,7 @@ class LoadImagesAndLabels9(Dataset):  # for training/testing
         self.label_files = img2label_paths(cache.keys())  # update
 
         n = len(shapes)  # number of images
-        bi = np.floor(np.arange(n) / batch_size).astype(np_int)  # batch index
+        bi = np.floor(np.arange(n) / batch_size).astype(np.int)  # batch index
         nb = bi[-1] + 1  # number of batches
         self.batch = bi  # batch index of image
         self.n = n
@@ -746,7 +717,7 @@ class LoadImagesAndLabels9(Dataset):  # for training/testing
                 elif mini > 1:
                     shapes[i] = [1, 1 / mini]
 
-            self.batch_shapes = np.ceil(np.array(shapes) * img_size / stride + pad).astype(np_int) * stride
+            self.batch_shapes = np.ceil(np.array(shapes) * img_size / stride + pad).astype(np.int) * stride
 
         # Check labels
         create_datasubset, extract_bounding_boxes, labels_loaded = False, False, False
@@ -792,7 +763,7 @@ class LoadImagesAndLabels9(Dataset):  # for training/testing
                         b = x[1:] * [w, h, w, h]  # box
                         b[2:] = b[2:].max()  # rectangle to square
                         b[2:] = b[2:] * 1.3 + 30  # pad
-                        b = xywh2xyxy(b.reshape(-1, 4)).ravel().astype(np_int)
+                        b = xywh2xyxy(b.reshape(-1, 4)).ravel().astype(np.int)
 
                         b[[0, 2]] = np.clip(b[[0, 2]], 0, w)  # clip boxes outside of image
                         b[[1, 3]] = np.clip(b[[1, 3]], 0, h)

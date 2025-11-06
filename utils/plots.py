@@ -85,330 +85,103 @@ def plot_wh_methods():  # from utils.general import *; plot_wh_methods()
     fig.tight_layout()
     fig.savefig('comparison.png', dpi=200)
 
-# Old function output to target, fail to compact in between old and new versions of torch
-# def output_to_target(output, width, height):
-#     # Convert model output to target format [batch_id, class_id, x, y, w, h, conf]
-#     if isinstance(output, torch.Tensor):
-#         output = output.cpu().numpy()
-
-#     targets = []
-#     for i, o in enumerate(output):
-#         if o is not None:
-#             for pred in o:
-#                 box = pred[:4]
-#                 w = (box[2] - box[0]) / width
-#                 h = (box[3] - box[1]) / height
-#                 x = box[0] / width + w / 2
-#                 y = box[1] / height + h / 2
-#                 conf = pred[4]
-#                 cls = int(pred[5])
-
-#                 targets.append([i, cls, x, y, w, h, conf])
-
-#     return np.array(targets)
 
 def output_to_target(output, width, height):
-    """
-    Convert model output to targets array of shape (N,6) or (N,7):
-      [img_idx, cls, x_center_norm, y_center_norm, w_norm, h_norm, (conf optional)]
-
-    Handles:
-    - output as a single tensor (Nx6/7/..., where first column may already be img_idx)
-    - output as a list/tuple of per-image tensors
-    - CUDA tensors (moved to CPU safely)
-    """
-    def to_numpy(x):
-        if isinstance(x, torch.Tensor):
-            return x.detach().cpu().numpy()
-        return np.asarray(x)
-
-    # If output is a single tensor that already includes image indices (first col)
+    # Convert model output to target format [batch_id, class_id, x, y, w, h, conf]
     if isinstance(output, torch.Tensor):
-        out = output.detach().cpu().numpy()
-        # if first column looks like image indices (integers and >=0), assume already in desired format
-        if out.ndim == 2 and out.shape[1] >= 6 and np.issubdtype(out[:, 0].dtype, np.integer):
-            return out
-        # if it's Nx6 without img index, assume batch dimension missing -> treat as single-image preds
-        output = [output]
+        output = output.cpu().numpy()
 
-    # If output is iterable (per-image predictions), convert and concatenate
-    targets_list = []
-    for img_idx, o in enumerate(output):
-        if o is None:
-            continue
-        arr = to_numpy(o)
-        if arr.size == 0:
-            continue
-        # arr is (n, k) where k depends on model: common formats:
-        # - xyxy, conf, cls  -> k==6  (x1,y1,x2,y2,conf,cls)
-        # - xyxy, cls         -> k==5  (x1,y1,x2,y2,cls)
-        # - xywh, conf, cls   -> k==6  (x_center,y_center,w,h,conf,cls)
-        # - xywh, cls         -> k==5
-        # We'll detect class column as the last column if integer-like.
-        if arr.ndim == 1:
-            # single detection vector -> make 2D
-            arr = arr.reshape(1, -1)
+    targets = []
+    for i, o in enumerate(output):
+        if o is not None:
+            for pred in o:
+                box = pred[:4]
+                w = (box[2] - box[0]) / width
+                h = (box[3] - box[1]) / height
+                x = box[0] / width + w / 2
+                y = box[1] / height + h / 2
+                conf = pred[4]
+                cls = int(pred[5])
 
-        ncols = arr.shape[1]
-        # find class column: prefer integer-like last column
-        class_col = ncols - 1
-        # find possible confidence column (a float between 0 and 1)
-        conf_col = None
-        if ncols >= 6:
-            # common: last col class, second-last conf when k==6
-            # decide by dtype/values heuristics
-            last_vals = arr[:, -1]
-            if np.all((last_vals == np.floor(last_vals)) & (last_vals >= 0)):
-                class_col = ncols - 1
-                conf_col = ncols - 2 if ncols >= 6 else None
-            else:
-                # last is likely float (conf); class may be second-last
-                if ncols >= 6 and np.all((arr[:, -2] == np.floor(arr[:, -2])) & (arr[:, -2] >= 0)):
-                    class_col = ncols - 2
-                    conf_col = ncols - 1
-                else:
-                    # fallback: treat last as class
-                    class_col = ncols - 1
-        elif ncols == 5:
-            # either xyxy+cls or xywh+cls -> last is class
-            class_col = 4
-        else:
-            # unexpected format: skip
-            continue
+                targets.append([i, cls, x, y, w, h, conf])
 
-        cls = arr[:, class_col].astype(int)
+    return np.array(targets)
 
-        # extract box columns (the columns excluding class and confidence)
-        box_cols = [i for i in range(ncols) if i not in (class_col, conf_col)]
-        boxes = arr[:, box_cols]
-
-        # Normalize & convert to xywh center normalized
-        if boxes.shape[1] == 4:
-            x1, y1, x2, y2 = boxes[:, 0], boxes[:, 1], boxes[:, 2], boxes[:, 3]
-            # detect whether coords are normalized (<=1) or pixel (likely >1)
-            if np.max(boxes) > 1.0:
-                # assume pixel coords
-                x_c = (x1 + x2) / 2.0 / width
-                y_c = (y1 + y2) / 2.0 / height
-                w = (x2 - x1) / width
-                h = (y2 - y1) / height
-            else:
-                # assume normalized xyxy
-                x_c = (x1 + x2) / 2.0
-                y_c = (y1 + y2) / 2.0
-                w = (x2 - x1)
-                h = (y2 - y1)
-        else:
-            # not 4 columns for box — skip
-            continue
-
-        # confidence if present
-        conf = None
-        if conf_col is not None:
-            conf = arr[:, conf_col].astype(float)
-
-        # assemble rows: [img_idx, cls, x_c, y_c, w, h, (conf optional)]
-        if conf is None:
-            rows = np.stack([np.full_like(cls, img_idx), cls, x_c, y_c, w, h], axis=1)
-        else:
-            rows = np.stack([np.full_like(cls, img_idx), cls, x_c, y_c, w, h, conf], axis=1)
-
-        targets_list.append(rows)
-
-    if not targets_list:
-        # empty: return empty array with 6 cols
-        return np.zeros((0, 6))
-
-    # concatenate into a single 2D numpy array (not an object array)
-    targets = np.vstack(targets_list)
-    return targets
-
-
-
-# def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max_size=640, max_subplots=16):
-#     # Plot image grid with labels
-
-#     if isinstance(images, torch.Tensor):
-#         images = images.cpu().float().numpy()
-#     if isinstance(targets, torch.Tensor):
-#         targets = targets.cpu().numpy()
-
-#     # un-normalise
-#     if np.max(images[0]) <= 1:
-#         images *= 255
-
-#     tl = 3  # line thickness
-#     tf = max(tl - 1, 1)  # font thickness
-#     bs, _, h, w = images.shape  # batch size, _, height, width
-#     bs = min(bs, max_subplots)  # limit plot images
-#     ns = np.ceil(bs ** 0.5)  # number of subplots (square)
-
-#     # Check if we should resize
-#     scale_factor = max_size / max(h, w)
-#     if scale_factor < 1:
-#         h = math.ceil(scale_factor * h)
-#         w = math.ceil(scale_factor * w)
-
-#     colors = color_list()  # list of colors
-#     mosaic = np.full((int(ns * h), int(ns * w), 3), 255, dtype=np.uint8)  # init
-#     for i, img in enumerate(images):
-#         if i == max_subplots:  # if last batch has fewer images than we expect
-#             break
-
-#         block_x = int(w * (i // ns))
-#         block_y = int(h * (i % ns))
-
-#         img = img.transpose(1, 2, 0)
-#         if scale_factor < 1:
-#             img = cv2.resize(img, (w, h))
-
-#         mosaic[block_y:block_y + h, block_x:block_x + w, :] = img
-#         if len(targets) > 0:
-#             image_targets = targets[targets[:, 0] == i]
-#             boxes = xywh2xyxy(image_targets[:, 2:6]).T
-#             classes = image_targets[:, 1].astype('int')
-#             labels = image_targets.shape[1] == 6  # labels if no conf column
-#             conf = None if labels else image_targets[:, 6]  # check for confidence presence (label vs pred)
-
-#             boxes[[0, 2]] *= w
-#             boxes[[0, 2]] += block_x
-#             boxes[[1, 3]] *= h
-#             boxes[[1, 3]] += block_y
-#             for j, box in enumerate(boxes.T):
-#                 cls = int(classes[j])
-#                 color = colors[cls % len(colors)]
-#                 cls = names[cls] if names else cls
-#                 if labels or conf[j] > 0.25:  # 0.25 conf thresh
-#                     label = '%s' % cls if labels else '%s %.1f' % (cls, conf[j])
-#                     plot_one_box(box, mosaic, label=label, color=color, line_thickness=tl)
-
-#         # Draw image filename labels
-#         if paths:
-#             label = Path(paths[i]).name[:40]  # trim to 40 char
-#             t_size = cv2.getTextSize(label, 0, fontScale=tl / 3, thickness=tf)[0]
-#             cv2.putText(mosaic, label, (block_x + 5, block_y + t_size[1] + 5), 0, tl / 3, [220, 220, 220], thickness=tf,
-#                         lineType=cv2.LINE_AA)
-
-#         # Image border
-#         cv2.rectangle(mosaic, (block_x, block_y), (block_x + w, block_y + h), (255, 255, 255), thickness=3)
-
-#     if fname:
-#         r = min(1280. / max(h, w) / ns, 1.0)  # ratio to limit image size
-#         mosaic = cv2.resize(mosaic, (int(ns * w * r), int(ns * h * r)), interpolation=cv2.INTER_AREA)
-#         # cv2.imwrite(fname, cv2.cvtColor(mosaic, cv2.COLOR_BGR2RGB))  # cv2 save
-#         Image.fromarray(mosaic).save(fname)  # PIL save
-#     return mosaic
 
 def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max_size=640, max_subplots=16):
-    # Plot image grid with labels. Works with torch tensors on GPU or CPU, lists, or numpy arrays.
+    # Plot image grid with labels
 
-    # Convert torch.Tensor -> numpy (move to CPU first).
     if isinstance(images, torch.Tensor):
-        images = images.detach().cpu().float().numpy()
-    elif isinstance(images, (list, tuple)):
-        # convert list of tensors or arrays to a single numpy array if possible
-        imgs = []
-        for im in images[:max_subplots]:
-            if isinstance(im, torch.Tensor):
-                imgs.append(im.detach().cpu().float().numpy())
-            else:
-                imgs.append(np.asarray(im))
-        images = np.stack(imgs, 0)
-    else:
-        images = np.asarray(images)
-
+        images = images.cpu().float().numpy()
     if isinstance(targets, torch.Tensor):
-        targets = targets.detach().cpu().numpy()
-    else:
-        targets = np.asarray(targets)
+        targets = targets.cpu().numpy()
 
-    # If targets is 1D (no boxes), make it empty 2D
-    if targets.ndim == 1:
-        targets = targets.reshape(-1, targets.shape[0])
-
-    # un-normalise if in [0,1]
-    try:
-        if np.max(images[0]) <= 1:
-            images = images * 255.0
-    except Exception:
-        pass
+    # un-normalise
+    if np.max(images[0]) <= 1:
+        images *= 255
 
     tl = 3  # line thickness
     tf = max(tl - 1, 1)  # font thickness
-
     bs, _, h, w = images.shape  # batch size, _, height, width
-    bs = min(bs, max_subplots)
-    ns = int(np.ceil(bs ** 0.5))  # number of subplots (square)
+    bs = min(bs, max_subplots)  # limit plot images
+    ns = np.ceil(bs ** 0.5)  # number of subplots (square)
 
-    # Resize check
+    # Check if we should resize
     scale_factor = max_size / max(h, w)
     if scale_factor < 1:
         h = math.ceil(scale_factor * h)
         w = math.ceil(scale_factor * w)
 
-    colors = color_list()
-    mosaic = np.full((int(ns * h), int(ns * w), 3), 255, dtype=np.uint8)
-
-    for i in range(bs):
-        if i == max_subplots:
+    colors = color_list()  # list of colors
+    mosaic = np.full((int(ns * h), int(ns * w), 3), 255, dtype=np.uint8)  # init
+    for i, img in enumerate(images):
+        if i == max_subplots:  # if last batch has fewer images than we expect
             break
 
         block_x = int(w * (i // ns))
         block_y = int(h * (i % ns))
 
-        img = images[i].transpose(1, 2, 0)
+        img = img.transpose(1, 2, 0)
         if scale_factor < 1:
             img = cv2.resize(img, (w, h))
 
-        # ensure uint8 image for plotting
-        if img.dtype != np.uint8:
-            img = np.clip(img, 0, 255).astype(np.uint8)
-
         mosaic[block_y:block_y + h, block_x:block_x + w, :] = img
-
-        # Plot targets for this image (targets format: [img_idx, cls, x, y, w, h, (conf)?])
-        if targets.size and targets.shape[0] > 0:
+        if len(targets) > 0:
             image_targets = targets[targets[:, 0] == i]
-            if image_targets.size:
-                # boxes in xywh normalized coords -> convert to pixel xyxy
-                boxes = xywh2xyxy(image_targets[:, 2:6]).T  # shape 4 x N
-                classes = image_targets[:, 1].astype(int)
-                labels_flag = image_targets.shape[1] == 6  # no confidence column -> labels
-                conf = None if labels_flag else image_targets[:, 6]
+            boxes = xywh2xyxy(image_targets[:, 2:6]).T
+            classes = image_targets[:, 1].astype('int')
+            labels = image_targets.shape[1] == 6  # labels if no conf column
+            conf = None if labels else image_targets[:, 6]  # check for confidence presence (label vs pred)
 
-                # scale boxes to this subplot
-                boxes[[0, 2]] *= w
-                boxes[[0, 2]] += block_x
-                boxes[[1, 3]] *= h
-                boxes[[1, 3]] += block_y
+            boxes[[0, 2]] *= w
+            boxes[[0, 2]] += block_x
+            boxes[[1, 3]] *= h
+            boxes[[1, 3]] += block_y
+            for j, box in enumerate(boxes.T):
+                cls = int(classes[j])
+                color = colors[cls % len(colors)]
+                cls = names[cls] if names else cls
+                if labels or conf[j] > 0.25:  # 0.25 conf thresh
+                    label = '%s' % cls if labels else '%s %.1f' % (cls, conf[j])
+                    plot_one_box(box, mosaic, label=label, color=color, line_thickness=tl)
 
-                for j, box in enumerate(boxes.T):
-                    cls = int(classes[j])
-                    color = colors[cls % len(colors)]
-                    cls_name = names[cls] if names else cls
-                    if labels_flag or (conf is not None and conf[j] > 0.25):
-                        label = '%s' % cls_name if labels_flag else '%s %.1f' % (cls_name, conf[j])
-                        plot_one_box(box, mosaic, label=label, color=color, line_thickness=tl)
-
-        # filename label
+        # Draw image filename labels
         if paths:
-            try:
-                label = Path(paths[i]).name[:40]
-                t_size = cv2.getTextSize(label, 0, fontScale=tl / 3, thickness=tf)[0]
-                cv2.putText(mosaic, label, (block_x + 5, block_y + t_size[1] + 5),
-                            0, tl / 3, [220, 220, 220], thickness=tf, lineType=cv2.LINE_AA)
-            except Exception:
-                pass
+            label = Path(paths[i]).name[:40]  # trim to 40 char
+            t_size = cv2.getTextSize(label, 0, fontScale=tl / 3, thickness=tf)[0]
+            cv2.putText(mosaic, label, (block_x + 5, block_y + t_size[1] + 5), 0, tl / 3, [220, 220, 220], thickness=tf,
+                        lineType=cv2.LINE_AA)
 
-        # border
+        # Image border
         cv2.rectangle(mosaic, (block_x, block_y), (block_x + w, block_y + h), (255, 255, 255), thickness=3)
 
     if fname:
-        r = min(1280. / max(h, w) / ns, 1.0)
+        r = min(1280. / max(h, w) / ns, 1.0)  # ratio to limit image size
         mosaic = cv2.resize(mosaic, (int(ns * w * r), int(ns * h * r)), interpolation=cv2.INTER_AREA)
-        Image.fromarray(mosaic).save(fname)
-
+        # cv2.imwrite(fname, cv2.cvtColor(mosaic, cv2.COLOR_BGR2RGB))  # cv2 save
+        Image.fromarray(mosaic).save(fname)  # PIL save
     return mosaic
+
 
 def plot_lr_scheduler(optimizer, scheduler, epochs=300, save_dir=''):
     # Plot LR simulating training for full epochs

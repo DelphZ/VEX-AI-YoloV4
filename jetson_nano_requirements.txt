@@ -1,0 +1,13 @@
+setuptools>=59.5.0
+scipy>=1.5.4
+numpy == 1.19.0
+#opencv-python >= 4.1 # Need Build from source
+#torch >= 1.10.0 # Need Build from source
+#torchvision # Need Build from source
+pyyaml==5.1.0
+pycocotools
+tqdm
+pillow
+tensorboard >= 1.14
+matplotlib==3.3.4
+# If you want to install in some where else, such as in sd card, Run:  pip3 install --no-build-isolation     --upgrade        -r requirements.txt

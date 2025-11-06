@@ -1,0 +1,1 @@
+ python3 ./detect.py --img-size 640 --device 0 --source ./train/img_41.jpg --cfg ./cfg/yolov4-tiny.cfg --names ./_vex.names --weights ./runs/train/yolov4-vex-detect/weights/best.pt

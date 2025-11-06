@@ -1,0 +1,6 @@
+pip3 install -r ./requirements.txt
+# If you want to install in some where else, such as in sd card, Run:  pip3 install --no-build-isolation     --upgrade        -r requirements.txt
+python3 ./train.py --device 0 --batch-size 2 --img 640 640 --data ./_vex.yaml --cfg ./cfg/yolov4-tiny.cfg --name yolov4-vex-detect --epochs 350 --weights ./yolov4.conv.137 --workers 2 --hyp ./data/hyp.scratch.s.yaml
+nohup python3 ./train.py --device 0 --batch-size 2 --img 640 640 --data ./_vex.yaml --cfg ./cfg/yolov4-tiny.cfg --name yolov4-vex-detect --epochs 350 --weights ./yolov4.conv.137 --workers 2 --hyp ./data/hyp.scratch.s.yaml > ./training.log 2>&1 &
+#python3 ./train.py --device 0 --batch-size 2 --img 640 640 --data ./_vex.yaml --cfg ./cfg/yolov4-tiny.cfg --name yolov4-vex-detect --epochs 400 --weights ./runs/train/yolov4-vex-detect/weights/best.pt --workers 2 --hyp ./data/hyp.scratch.s.yaml
+
