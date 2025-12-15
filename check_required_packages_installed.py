@@ -31,6 +31,7 @@ for pkg_name in special_packages:
         elif pkg_name == 'torch':
             import torch
             print(f'torch: {torch.__version__}')
+            print(f'torch cuda is available: {torch.cuda.is_available()}')  
         elif pkg_name == 'torchvision':
             import torchvision
             print(f'torchvision: {torchvision.__version__}')
