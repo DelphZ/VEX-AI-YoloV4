@@ -94,7 +94,11 @@ def output_to_target(output, width, height):
     targets = []
     for i, o in enumerate(output):
         if o is not None:
+            if isinstance(o, torch.Tensor):
+                o = o.cpu().numpy()
             for pred in o:
+                if isinstance(pred, torch.Tensor):
+                    pred = pred.cpu().numpy()
                 box = pred[:4]
                 w = (box[2] - box[0]) / width
                 h = (box[3] - box[1]) / height
@@ -158,12 +162,19 @@ def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max
             boxes[[1, 3]] *= h
             boxes[[1, 3]] += block_y
             for j, box in enumerate(boxes.T):
-                cls = int(classes[j])
-                color = colors[cls % len(colors)]
-                cls = names[cls] if names else cls
-                if labels or conf[j] > 0.25:  # 0.25 conf thresh
-                    label = '%s' % cls if labels else '%s %.1f' % (cls, conf[j])
-                    plot_one_box(box, mosaic, label=label, color=color, line_thickness=tl)
+                try:
+                    cls = int(classes[j])
+                    color = colors[cls % len(colors)]
+                    cls = names[cls] if names else cls
+                    if labels or conf[j] > 0.25:  # 0.25 conf thresh
+                        label = '%s' % cls if labels else '%s %.1f' % (cls, conf[j])
+                        plot_one_box(box, mosaic, label=label, color=color, line_thickness=tl)
+                except IndexError as e:
+                    print(f"\n[Index error catched] When draw {i}th img {j}th box:")
+                    print(f"          names length = {len(names) if names else 'None'}")
+                    print(f"          index: {int(classes[j])}")
+                    print(f"          entire classes: {classes.tolist()}")
+                    print(f"          Ensure the given cfg file set the correct class num.")
 
         # Draw image filename labels
         if paths:
